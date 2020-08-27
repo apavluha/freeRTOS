@@ -3,8 +3,7 @@
 #include "task.h"
 #include "queue.h"
 
-
-
+			
 void LedsInit(void)
 {
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC, ENABLE);// инициализация и тактирование светодиодов
@@ -42,12 +41,20 @@ void vBlinker2(void *pvParameters)
 
 void vTempMeasure(void *pvParameters)
 {
-	Ds18b20 ds18b20(GPIOA, GPIO_Pin_0, RCC_APB2Periph_GPIOA);
+	Ds18b20 ds18b20(GPIOA, GPIO_Pin_0, RCC_APB2Periph_GPIOA); //создаем объект класса и инициализируем
+	unsigned char crc_calc, crc_from_device; 
+	float temper;
 	while(true)
 	{
-		float temper = ds18b20.getFTemperature();
-		xQueueSendToBack(Queue_temp, &temper, 0);
-		vTaskDelay(3000);
+		do
+		{
+			temper = ds18b20.getFTemperature();
+			crc_from_device = ds18b20.getCRCFromDevice();
+			crc_calc = ds18b20.calculateCrc();
+			}while(crc_calc != crc_from_device);// сравниваем crc с датчика и crc вычисленный нами
+		
+		xQueueSendToBack(Queue_temp, &temper, 0);// пихаем температуру в очередь
+			vTaskDelay(3000);// блок на 3 сек
 	}
 }
 
@@ -57,9 +64,9 @@ void vDisplayTemp(void *pvParameters)
 	while(true)
 	{
 		float temper;
-		xQueueReceive(Queue_temp, &temper, 3000);
-		floatToLCD(temper);
-		vTaskDelay(3000);
+		xQueueReceive(Queue_temp, &temper, 3000); // принимаем из очереди float, если очередь пуста уходим в блок на 3 сек
+		floatToLCD(temper); // выводим на дисплей
+		vTaskDelay(3000); // блок на 3 сек
 	}
 }
 //----------------------------------------------------------------------------
@@ -75,6 +82,12 @@ int main()
 		LCD_pinsInit();
 	
 		LCD_init();
+		
+//		Ds18b20 ds18b20(GPIOA, GPIO_Pin_0, RCC_APB2Periph_GPIOA);
+//		float temper = ds18b20.getFTemperature();
+//		unsigned char crc = ds18b20.getCRCFromDevice();
+//		unsigned char crc1 = ds18b20.calculateCrc();
+	
 		
 		Queue_temp = xQueueCreate(5, sizeof(float));// очередь в 5 элементов размером типа float
 	

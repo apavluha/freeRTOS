@@ -84,10 +84,12 @@ class OneWireDevice
 		char readBit(void)
 		{
 			unsigned char bit = 0;
-			_1wToGnd(); //притягиваем шину к земле
-			delay_us(2);
 			_1wToUp(); //отпускаем шину
-			delay_us(13);
+			delay_us(1);
+			_1wToGnd(); //притягиваем шину к земле
+			delay_us(3);
+			_1wToUp(); //отпускаем шину
+			delay_us(12);
 			bit = readBitFromOneWire();
 			delay_us(50); // задержка 50 мкс
 			return bit;
@@ -121,7 +123,7 @@ class OneWireDevice
 		//Эти методы не будут работать без инициализации таймера!!!
 		//Поэтому перед созданием объекта класса, нужно вызвать функцию инициализации TIM2_Init()
 		//*********************************************************
-		//Пока функционал класса ограничен только ситыванием температуры без проверки CRC и поиском устройств на линии
+		//Пока функционал класса ограничен только ситыванием температуры без поиска устройств на линии
 		//*********************************************************
 
 		
@@ -143,13 +145,14 @@ class Ds18b20 : public OneWireDevice
 		// массив байт считанных из датчика
 		float m_temperature;
 		char m_str_temperature[7];
+		unsigned char rom_buf[8];
 		
 		void getMemory()
 			{
 				resetOneWire();// сигнал сброса
 				writeByte(SKIP_ROM); //пропустить считку ROM датчика
 				writeByte(CONVERT_T); // сигнал "конвертируй температуру"
-				delay_ms(800);// задержка необходима для конвертации температуры (зависит от разрядности)
+				delay_ms(1000);// задержка необходима для конвертации температуры (зависит от разрядности)
 				
 				resetOneWire();// опять сброс
 				writeByte(SKIP_ROM);//опять пропускаем считку ROM
@@ -193,18 +196,36 @@ class Ds18b20 : public OneWireDevice
 			{
 				if(m_temperature >= 10.0 && m_temperature < 100.0)
 				{
-					sprintf(m_str_temperature, "%f", m_temperature);
+					sprintf(m_str_temperature, "%f", m_temperature);//буфер для преобразования типа float в си-строку
 					m_str_temperature[5] = '\0';
 				}
 				if(m_temperature < 10.0 && m_temperature > -10.0)
 				{
-					sprintf(m_str_temperature, "%f", m_temperature);
+					sprintf(m_str_temperature, "%f", m_temperature);//буфер для преобразования типа float в си-строку
 					m_str_temperature[4] = '\0';
 				}
 				return m_str_temperature;
 			}
 			
-//			unsigned char calculateCrc()
-//			{}
+			
+			//Расчет CRC
+			unsigned char calculateCrc()
+			{
+				unsigned char *pcBlock = m_buf; // указатель на первый элемент массива данных датчика
+				int len = 8; // длина массива до байта crc
+				unsigned char crc = 0x0;
+				while(len--)
+				{
+					unsigned char inbyte = *pcBlock++;
+					for(char i = 0; i < 8; i++)
+					{
+						unsigned char mix = (crc^inbyte) & 0x01;
+						crc >>= 1;
+						if(mix) {crc ^= 0x8C;}
+						inbyte >>= 1;
+					}
+				}
+				return crc;
+			}
 };
 #endif
